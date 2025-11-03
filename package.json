@@ -1,0 +1,21 @@
+{
+  "name": "catchapage",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run index.ts",
+    "lint": "biome lint .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.3",
+    "@types/bun": "^1.3.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "playwright": "^1.56.1"
+  }
+}
