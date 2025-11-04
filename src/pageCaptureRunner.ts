@@ -1,13 +1,7 @@
 import { chromium } from "playwright"
 import type { CaptureOutcome } from "./captureOutcome"
 import { joinPath } from "./joinPath"
-import {
-  DEFAULT_OUTPUT_DIR,
-  CHROMIUM_HOST_RESOLVER_RULES,
-  CHROMIUM_USE_CUSTOM_DNS,
-  CHROMIUM_DNS_SERVERS,
-  PARALLEL_CAPTURE_ENABLED,
-} from "./config"
+import { config } from "./config"
 import { DeviceContextFactory } from "./deviceContextFactory"
 import { LinkCaptureTask } from "./linkCaptureTask"
 
@@ -36,7 +30,7 @@ export class PageCaptureRunner {
 
   constructor(
     private readonly urls: string[],
-    private readonly outputDir: string = DEFAULT_OUTPUT_DIR,
+    private readonly outputDir: string = config.DEFAULT_OUTPUT_DIR,
   ) {}
 
   async run(): Promise<CaptureOutcome[]> {
@@ -93,12 +87,12 @@ export class PageCaptureRunner {
         deviceContextFactory: this.deviceContextFactory,
         url,
         linkDir,
-        parallelVariants: PARALLEL_CAPTURE_ENABLED,
+        parallelVariants: config.PARALLEL_CAPTURE_ENABLED,
       })
       tasks.push({ url, linkDir, task })
       console.log(
         `Queued capture task ${index + 1}/${this.urls.length} for ${url}. Variants: ${
-          PARALLEL_CAPTURE_ENABLED ? "parallel" : "sequential"
+          config.PARALLEL_CAPTURE_ENABLED ? "parallel" : "sequential"
         }.`,
       )
     }
@@ -112,7 +106,9 @@ export class PageCaptureRunner {
       const outcome = await entry.task.run()
 
       if (outcome.success) {
-        console.log(`✓ Saved capture: ${entry.linkDir}`)
+        console.log(
+          `✓ Saved capture for ${outcome.url}: ${outcome.folder} (desktop/tablet/mobile HTML & PNG artifacts).`,
+        )
       } else {
         console.error(`✗ Error (${entry.url}): ${outcome.error}`)
       }
@@ -120,7 +116,7 @@ export class PageCaptureRunner {
       return outcome
     }
 
-    if (PARALLEL_CAPTURE_ENABLED) {
+    if (config.PARALLEL_CAPTURE_ENABLED) {
       return Promise.all(tasks.map((task) => runTask(task)))
     }
 
@@ -206,7 +202,7 @@ export class PageCaptureRunner {
   private static buildChromiumLaunchOptions(): Parameters<typeof chromium.launch>[0] {
     const args: string[] = []
 
-    const hostResolverRules = Array.from(CHROMIUM_HOST_RESOLVER_RULES)
+    const hostResolverRules = Array.from(config.CHROMIUM_HOST_RESOLVER_RULES)
       .map((rule) => rule.trim())
       .filter(Boolean)
 
@@ -214,8 +210,8 @@ export class PageCaptureRunner {
       args.push(`--host-resolver-rules=${hostResolverRules.join(",")}`)
     }
 
-    if (CHROMIUM_USE_CUSTOM_DNS) {
-      const dnsServers = Array.from(CHROMIUM_DNS_SERVERS)
+    if (config.CHROMIUM_USE_CUSTOM_DNS) {
+      const dnsServers = Array.from(config.CHROMIUM_DNS_SERVERS)
         .map((server) => server.trim())
         .filter(Boolean)
 

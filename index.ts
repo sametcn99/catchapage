@@ -1,6 +1,6 @@
 import { PageCaptureRunner } from "./src/pageCaptureRunner"
 import { loadUrlsFromFile } from "./src/loadUrlsFromFile"
-import { LINKS_FILE } from "./src/config"
+import { config } from "./src/config"
 import { FileLogger, RunFolderLoggingObserver } from "./src/fileLogger"
 
 const originalConsoleLog = console.log.bind(console)
@@ -28,7 +28,7 @@ async function main() {
   let urls: string[]
 
   try {
-    urls = await loadUrlsFromFile(LINKS_FILE)
+    urls = await loadUrlsFromFile(config.LINKS_FILE)
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Failed to load links from links.txt.")
     process.exit(1)

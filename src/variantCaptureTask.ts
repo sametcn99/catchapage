@@ -1,18 +1,29 @@
 import type { Browser, BrowserContextOptions, Page, Response } from "playwright"
-import {
-  CAPTURE_STABILIZATION_DELAY_MS,
-  CONTENT_READY_TIMEOUT_MS,
-  FALLBACK_NAVIGATION_TIMEOUT_MS,
-  POST_NAVIGATION_IDLE_MS,
-  PRIMARY_NAVIGATION_TIMEOUT_MS,
-} from "./config"
+import { config } from "./config"
 import { joinPath } from "./joinPath"
+
+// cspell:ignore networkidle domcontentloaded
 
 type NavigationWaitUntil = NonNullable<Parameters<Page["goto"]>[1]>["waitUntil"]
 
 type NavigationStrategy = {
   waitUntil: NavigationWaitUntil
   timeout: number
+}
+
+type DomRectLike = {
+  width: number
+  height: number
+}
+
+type DomElementLike = {
+  innerText?: string
+  querySelector?: (selector: string) => DomElementLike | null
+  getBoundingClientRect?: () => DomRectLike
+}
+
+type DocumentLike = {
+  body?: DomElementLike | null
 }
 
 export interface VariantCaptureConfig {
@@ -27,8 +38,8 @@ export interface VariantCaptureConfig {
 
 export class VariantCaptureTask {
   private static readonly NAVIGATION_STRATEGIES: ReadonlyArray<NavigationStrategy> = [
-    { waitUntil: "networkidle", timeout: PRIMARY_NAVIGATION_TIMEOUT_MS },
-    { waitUntil: "domcontentloaded", timeout: FALLBACK_NAVIGATION_TIMEOUT_MS },
+    { waitUntil: "networkidle", timeout: config.PRIMARY_NAVIGATION_TIMEOUT_MS },
+    { waitUntil: "domcontentloaded", timeout: config.FALLBACK_NAVIGATION_TIMEOUT_MS },
   ]
 
   constructor(private readonly config: VariantCaptureConfig) {}
@@ -39,12 +50,12 @@ export class VariantCaptureTask {
 
     const html = await this.withContext(async (page) => {
       await this.navigateWithFallback(page)
-      if (POST_NAVIGATION_IDLE_MS > 0) {
+      if (config.POST_NAVIGATION_IDLE_MS > 0) {
         this.logInfo(
-          `Waiting ${POST_NAVIGATION_IDLE_MS}ms after navigation to allow the page to settle...`,
+          `Waiting ${config.POST_NAVIGATION_IDLE_MS}ms after navigation to allow the page to settle...`,
         )
         const idleWaitStart = Date.now()
-        await page.waitForTimeout(POST_NAVIGATION_IDLE_MS)
+        await page.waitForTimeout(config.POST_NAVIGATION_IDLE_MS)
         this.logInfo(`Post-navigation idle wait complete (${this.formatDuration(idleWaitStart)}).`)
       } else {
         this.logInfo("Skipping post-navigation idle wait (disabled).")
@@ -151,71 +162,71 @@ export class VariantCaptureTask {
   }
 
   private async waitForStabilization(page: Page) {
-    if (CAPTURE_STABILIZATION_DELAY_MS <= 0) {
+    if (config.CAPTURE_STABILIZATION_DELAY_MS <= 0) {
       this.logInfo("Skipping stabilization wait (disabled).")
       return
     }
 
     this.logInfo(
-      `Waiting ${CAPTURE_STABILIZATION_DELAY_MS}ms for stabilization after initial idle delay...`,
+      `Waiting ${config.CAPTURE_STABILIZATION_DELAY_MS}ms for stabilization after initial idle delay...`,
     )
     const waitStart = Date.now()
-    await page.waitForTimeout(CAPTURE_STABILIZATION_DELAY_MS)
+    await page.waitForTimeout(config.CAPTURE_STABILIZATION_DELAY_MS)
     this.logInfo(`Stabilization wait complete (${this.formatDuration(waitStart)}).`)
   }
 
   private async waitForMeaningfulContent(page: Page) {
-    if (CONTENT_READY_TIMEOUT_MS <= 0) {
+    if (config.CONTENT_READY_TIMEOUT_MS <= 0) {
       this.logInfo("Skipping meaningful content wait (disabled).")
       return
     }
 
     const waitStart = Date.now()
-    this.logInfo(`Waiting for meaningful content (timeout: ${CONTENT_READY_TIMEOUT_MS}ms)...`)
+    this.logInfo(
+      `Waiting for meaningful content (timeout: ${config.CONTENT_READY_TIMEOUT_MS}ms)...`,
+    )
 
     try {
       await page.waitForFunction(
         () => {
-          const body = document.body
+          const doc = (globalThis as { document?: DocumentLike }).document
+          const body = doc?.body ?? null
 
           if (!body) {
             return false
           }
 
-          const textContent = body.innerText?.trim()
+          const textContent = (body.innerText ?? "").trim()
 
-          if (textContent) {
+          if (textContent.length > 0) {
             return true
           }
 
-          const meaningfulElement = body.querySelector(
-            "img, video, iframe, canvas, svg, picture, main, article, section, div",
-          )
+          const querySelector = body.querySelector ?? null
+          const meaningfulElement = querySelector
+            ? querySelector("img, video, iframe, canvas, svg, picture, main, article, section, div")
+            : null
 
           if (!meaningfulElement) {
             return false
           }
 
-          if (meaningfulElement instanceof HTMLElement) {
-            const text = meaningfulElement.innerText.trim()
+          const meaningfulText = (meaningfulElement.innerText ?? "").trim()
 
-            if (text.length > 0) {
-              return true
-            }
-
-            const rect = meaningfulElement.getBoundingClientRect()
-            return rect.width > 0 && rect.height > 0
+          if (meaningfulText.length > 0) {
+            return true
           }
 
-          return true
+          const rect = meaningfulElement.getBoundingClientRect?.()
+          return Boolean(rect && rect.width > 0 && rect.height > 0)
         },
-        { timeout: CONTENT_READY_TIMEOUT_MS },
+        { timeout: config.CONTENT_READY_TIMEOUT_MS },
       )
       this.logInfo(`Meaningful content detected (${this.formatDuration(waitStart)}).`)
     } catch {
-      this.logWarn(`Meaningful content not detected within ${CONTENT_READY_TIMEOUT_MS}ms.`)
+      this.logWarn(`Meaningful content not detected within ${config.CONTENT_READY_TIMEOUT_MS}ms.`)
       throw new Error(
-        `Page content did not become ready for ${this.config.url} within ${CONTENT_READY_TIMEOUT_MS}ms.`,
+        `Page content did not become ready for ${this.config.url} within ${config.CONTENT_READY_TIMEOUT_MS}ms.`,
       )
     }
   }

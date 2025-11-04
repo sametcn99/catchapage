@@ -84,7 +84,7 @@ Run folders are created once per execution and stamped using the `en-GB` date fo
 
 The generated run directory resembles the following structure:
 
-```text
+```tree
 output/
 └── 21-02-2025-09-30-12/
     ├── console.log
@@ -108,14 +108,30 @@ output/
 
 ## Configuration
 
-All tunables live in `src/config.ts`:
+`src/config.ts` centralises every tunable. It builds a `zod` schema that reads from `Bun.env`, validates types, and materialises a frozen `RuntimeConfiguration` instance on first import. Each value has a default, so the app starts with no `.env`, while malformed input fails fast with clear error messages.
+
+### Setting Environment Values
+
+1. Copy `.env.example` to `.env`.
+2. Override any variables you need. Bun automatically loads `.env` for `bun start`, `bun run`, and `bunx` scripts, so no extra flags are required.
+3. Re-run `bun start`. If a value cannot be parsed, the configuration loader explains which variable is invalid and why.
+
+Alternatively, export variables in your shell or CI job—`RuntimeConfiguration` always reads from `Bun.env`.
+
+### Validation Rules
+
+- Numeric fields must contain valid numbers; otherwise `zod` throws with the original string.
+- Boolean fields accept only `"true"` or `"false"`.
+- Comma-separated lists (for example `CHROMIUM_HOST_RESOLVER_RULES`) are split, trimmed, and filtered for empties.
+- `*_COLOR_SCHEME` accepts `dark`, `light`, `no-preference`, `null`, or `undefined`.
+- Device descriptor names are trimmed. When a descriptor is missing, `DeviceContextFactory` logs a one-time warning and falls back to the manual viewport and screen dimensions.
+
+### Common Adjustments
 
 - **Device profiles**: Swap Playwright descriptor names (e.g., `DESKTOP_DEVICE_DESCRIPTOR`) or customise viewports, scale factors, and user agents.
-- **Locales & timezones**: Adjust the locale/timezone constants to emulate regional behaviour.
+- **Locales & timezones**: Adjust locale/timezone constants to emulate regional behaviour.
 - **Timeouts**: Modify navigation, idle waits, and content readiness thresholds to suit slower sites.
 - **Networking**: Supply host resolver rules or custom DNS servers when captures run in isolated environments.
-
-If a named Playwright descriptor cannot be resolved, `DeviceContextFactory` automatically falls back to the provided custom profile and emits a one-time warning.
 
 ### Environment-Specific Tweaks
 
@@ -126,17 +142,78 @@ If a named Playwright descriptor cannot be resolved, `DeviceContextFactory` auto
 
 ### Configuration Reference
 
-| Constant | Purpose | Default |
-| --- | --- | --- |
-| `DEFAULT_OUTPUT_DIR` | Root directory for timestamped runs | `"output"` |
-| `LINKS_FILE` | Source list for URLs to capture | `"links.txt"` |
-| `PRIMARY_NAVIGATION_TIMEOUT_MS` | Preferred timeout when waiting for `networkidle` | `45000` |
-| `FALLBACK_NAVIGATION_TIMEOUT_MS` | Backup timeout for `domcontentloaded` fallback | `60000` |
-| `POST_NAVIGATION_IDLE_MS` | Delay after navigation before stabilization checks | `1000` |
-| `CAPTURE_STABILIZATION_DELAY_MS` | Additional wait before screenshotting | `2000` |
-| `CONTENT_READY_TIMEOUT_MS` | Time allowed for meaningful DOM content to appear | `10000` |
-| `CHROMIUM_USE_CUSTOM_DNS` | Enables custom DNS servers in Chromium launch args | `false` |
-| `CHROMIUM_DNS_SERVERS` | DNS servers applied when the toggle is `true` | `["94.140.14.14", "94.140.14.15"]` |
+The tables below show how environment variables map to the exported configuration and the defaults applied when no override is provided. Refer to `.env.example` for the full strings (for example, user-agent headers).
+
+#### Core Paths & Toggles
+
+| Environment variable        | Config property                      | Default     | Notes                                   |
+|-----------------------------|--------------------------------------|-------------|-----------------------------------------|
+| `DEFAULT_OUTPUT_DIR`        | `config.DEFAULT_OUTPUT_DIR`          | `output`    | Root directory for timestamped runs.    |
+| `LINKS_FILE`                | `config.LINKS_FILE`                  | `links.txt` | File containing URLs to capture.        |
+| `PARALLEL_CAPTURE_ENABLED`  | `config.PARALLEL_CAPTURE_ENABLED`    | `true`      | Enables multi-page concurrency.         |
+
+#### Navigation & Timing
+
+| Environment variable                | Config property                               | Default | Notes                                                      |
+|-------------------------------------|------------------------------------------------|---------|------------------------------------------------------------|
+| `PRIMARY_NAVIGATION_TIMEOUT_MS`     | `config.PRIMARY_NAVIGATION_TIMEOUT_MS`         | `45000` | Timeout when waiting for `networkidle`.                    |
+| `FALLBACK_NAVIGATION_TIMEOUT_MS`    | `config.FALLBACK_NAVIGATION_TIMEOUT_MS`        | `60000` | Timeout for the `domcontentloaded` fallback strategy.      |
+| `POST_NAVIGATION_IDLE_MS`           | `config.POST_NAVIGATION_IDLE_MS`               | `1000`  | Delay before stability checks run.                         |
+| `CAPTURE_STABILIZATION_DELAY_MS`    | `config.CAPTURE_STABILIZATION_DELAY_MS`        | `2000`  | Additional wait before screenshots are taken.              |
+| `CONTENT_READY_TIMEOUT_MS`          | `config.CONTENT_READY_TIMEOUT_MS`              | `10000` | Max time to wait for meaningful DOM content.               |
+
+#### Desktop Profile
+
+| Environment variable            | Config property                                  | Default value            | Notes                                       |
+|---------------------------------|--------------------------------------------------|--------------------------|---------------------------------------------|
+| `DESKTOP_DEVICE_DESCRIPTOR`     | `config.DESKTOP_DEVICE_DESCRIPTOR`               | `Desktop Chrome`         | Playwright preset name.                     |
+| `DESKTOP_VIEWPORT_WIDTH`        | `config.DESKTOP_VIEWPORT.width`                  | `1280`                   | Pixels.                                     |
+| `DESKTOP_VIEWPORT_HEIGHT`       | `config.DESKTOP_VIEWPORT.height`                 | `720`                    | Pixels.                                     |
+| `DESKTOP_SCREEN_WIDTH`          | `config.DESKTOP_SCREEN.width`                    | `1920`                   | Reported `window.screen.width`.            |
+| `DESKTOP_SCREEN_HEIGHT`         | `config.DESKTOP_SCREEN.height`                   | `1080`                   | Reported `window.screen.height`.           |
+| `DESKTOP_DEVICE_SCALE_FACTOR`   | `config.DESKTOP_DEVICE_SCALE_FACTOR`             | `1.5`                    | Pixels per device-independent pixel.        |
+| `DESKTOP_LOCALE`                | `config.DESKTOP_LOCALE`                          | `en-US`                  | Locale passed via context options.          |
+| `DESKTOP_TIMEZONE_ID`           | `config.DESKTOP_TIMEZONE_ID`                     | `Europe/Istanbul`        | IANA timezone identifier.                   |
+| `DESKTOP_COLOR_SCHEME`          | `config.DESKTOP_COLOR_SCHEME`                    | `dark`                   | Media emulation for `prefers-color-scheme`. |
+| `DESKTOP_USER_AGENT`            | `config.DESKTOP_USER_AGENT`                      | Chrome on Windows 10 UA  | Full string in `.env.example`.              |
+
+#### Mobile Profile
+
+| Environment variable            | Config property                                  | Default value            | Notes                                       |
+|---------------------------------|--------------------------------------------------|--------------------------|---------------------------------------------|
+| `MOBILE_DEVICE_DESCRIPTOR`      | `config.MOBILE_DEVICE_DESCRIPTOR`                | `Pixel 5`                | Playwright preset name.                     |
+| `MOBILE_VIEWPORT_WIDTH`         | `config.MOBILE_VIEWPORT.width`                   | `390`                    | Pixels.                                     |
+| `MOBILE_VIEWPORT_HEIGHT`        | `config.MOBILE_VIEWPORT.height`                  | `844`                    | Pixels.                                     |
+| `MOBILE_SCREEN_WIDTH`           | `config.MOBILE_SCREEN.width`                     | `1080`                   | Reported `window.screen.width`.            |
+| `MOBILE_SCREEN_HEIGHT`          | `config.MOBILE_SCREEN.height`                    | `2340`                   | Reported `window.screen.height`.           |
+| `MOBILE_DEVICE_SCALE_FACTOR`    | `config.MOBILE_DEVICE_SCALE_FACTOR`              | `3`                      | Pixels per device-independent pixel.        |
+| `MOBILE_LOCALE`                 | `config.MOBILE_LOCALE`                           | `en-US`                  | Locale passed via context options.          |
+| `MOBILE_TIMEZONE_ID`            | `config.MOBILE_TIMEZONE_ID`                      | `America/Los_Angeles`    | IANA timezone identifier.                   |
+| `MOBILE_COLOR_SCHEME`           | `config.MOBILE_COLOR_SCHEME`                     | `dark`                   | Media emulation for `prefers-color-scheme`. |
+| `DEFAULT_MOBILE_USER_AGENT`     | `config.DEFAULT_MOBILE_USER_AGENT`               | Chrome on Android UA     | Full string in `.env.example`.              |
+
+#### Tablet Profile
+
+| Environment variable            | Config property                                  | Default value            | Notes                                       |
+|---------------------------------|--------------------------------------------------|--------------------------|---------------------------------------------|
+| `TABLET_DEVICE_DESCRIPTOR`      | `config.TABLET_DEVICE_DESCRIPTOR`                | `iPad (gen 7)`           | Playwright preset name.                     |
+| `TABLET_VIEWPORT_WIDTH`         | `config.TABLET_VIEWPORT.width`                   | `1024`                   | Pixels.                                     |
+| `TABLET_VIEWPORT_HEIGHT`        | `config.TABLET_VIEWPORT.height`                  | `1366`                   | Pixels.                                     |
+| `TABLET_SCREEN_WIDTH`           | `config.TABLET_SCREEN.width`                     | `1620`                   | Reported `window.screen.width`.            |
+| `TABLET_SCREEN_HEIGHT`          | `config.TABLET_SCREEN.height`                    | `2160`                   | Reported `window.screen.height`.           |
+| `TABLET_DEVICE_SCALE_FACTOR`    | `config.TABLET_DEVICE_SCALE_FACTOR`              | `2`                      | Pixels per device-independent pixel.        |
+| `TABLET_LOCALE`                 | `config.TABLET_LOCALE`                           | `en-US`                  | Locale passed via context options.          |
+| `TABLET_TIMEZONE_ID`            | `config.TABLET_TIMEZONE_ID`                      | `America/Los_Angeles`    | IANA timezone identifier.                   |
+| `TABLET_COLOR_SCHEME`           | `config.TABLET_COLOR_SCHEME`                     | `dark`                   | Media emulation for `prefers-color-scheme`. |
+| `DEFAULT_TABLET_USER_AGENT`     | `config.DEFAULT_TABLET_USER_AGENT`               | Safari on iPad UA        | Full string in `.env.example`.              |
+
+#### Chromium Networking
+
+| Environment variable              | Config property                         | Default value                | Notes                                                      |
+|-----------------------------------|-----------------------------------------|------------------------------|------------------------------------------------------------|
+| `CHROMIUM_HOST_RESOLVER_RULES`    | `config.CHROMIUM_HOST_RESOLVER_RULES`   | *(empty list)*               | Comma-separated host resolver rules.                       |
+| `CHROMIUM_USE_CUSTOM_DNS`         | `config.CHROMIUM_USE_CUSTOM_DNS`        | `false`                      | Enables custom DNS routing when `true`.                    |
+| `CHROMIUM_DNS_SERVERS`            | `config.CHROMIUM_DNS_SERVERS`           | `["94.140.14.14","94.140.14.15"]` | Comma-separated DNS servers applied when enabled. |
 
 ## How It Works
 

@@ -1,39 +1,18 @@
 import { devices, type BrowserContextOptions } from "playwright"
-import {
-  DESKTOP_COLOR_SCHEME,
-  DESKTOP_DEVICE_DESCRIPTOR,
-  DESKTOP_DEVICE_SCALE_FACTOR,
-  DESKTOP_LOCALE,
-  DESKTOP_SCREEN,
-  DESKTOP_TIMEZONE_ID,
-  DESKTOP_USER_AGENT,
-  DESKTOP_VIEWPORT,
-  DEFAULT_MOBILE_USER_AGENT,
-  DEFAULT_TABLET_USER_AGENT,
-  MOBILE_COLOR_SCHEME,
-  MOBILE_DEVICE_DESCRIPTOR,
-  MOBILE_DEVICE_SCALE_FACTOR,
-  MOBILE_LOCALE,
-  MOBILE_SCREEN,
-  MOBILE_TIMEZONE_ID,
-  MOBILE_VIEWPORT,
-  TABLET_COLOR_SCHEME,
-  TABLET_DEVICE_DESCRIPTOR,
-  TABLET_DEVICE_SCALE_FACTOR,
-  TABLET_LOCALE,
-  TABLET_SCREEN,
-  TABLET_TIMEZONE_ID,
-  TABLET_VIEWPORT,
-} from "./config"
+import { config } from "./config"
 
 type PlaywrightDeviceDescriptor = (typeof devices)[keyof typeof devices]
 type DeviceKind = "desktop" | "mobile" | "tablet"
 
+type ContextOptions = BrowserContextOptions & {
+  screen?: NonNullable<BrowserContextOptions["screen"]>
+}
+
 type DeviceProfileInit = {
   descriptorName: string | undefined
   type: DeviceKind
-  fallback: BrowserContextOptions
-  overrides: BrowserContextOptions
+  fallback: ContextOptions
+  overrides: ContextOptions
 }
 
 export class DeviceContextFactory {
@@ -44,19 +23,21 @@ export class DeviceContextFactory {
   buildDesktopContextOptions(): BrowserContextOptions {
     return this.buildDeviceProfile({
       type: "desktop",
-      descriptorName: DESKTOP_DEVICE_DESCRIPTOR,
-      fallback: {
-        viewport: DESKTOP_VIEWPORT,
-        screen: DESKTOP_SCREEN,
-        deviceScaleFactor: DESKTOP_DEVICE_SCALE_FACTOR,
-        userAgent: DESKTOP_USER_AGENT,
-        isMobile: false,
-        hasTouch: false,
-      },
+      descriptorName: config.DESKTOP_DEVICE_DESCRIPTOR,
+      fallback: DeviceContextFactory.withScreen(
+        {
+          viewport: config.DESKTOP_VIEWPORT,
+          deviceScaleFactor: config.DESKTOP_DEVICE_SCALE_FACTOR,
+          userAgent: config.DESKTOP_USER_AGENT,
+          isMobile: false,
+          hasTouch: false,
+        },
+        config.DESKTOP_SCREEN,
+      ),
       overrides: {
-        locale: DESKTOP_LOCALE,
-        timezoneId: DESKTOP_TIMEZONE_ID,
-        colorScheme: DESKTOP_COLOR_SCHEME,
+        locale: config.DESKTOP_LOCALE,
+        timezoneId: config.DESKTOP_TIMEZONE_ID,
+        colorScheme: config.DESKTOP_COLOR_SCHEME,
       },
     })
   }
@@ -64,19 +45,21 @@ export class DeviceContextFactory {
   buildMobileContextOptions(): BrowserContextOptions {
     return this.buildDeviceProfile({
       type: "mobile",
-      descriptorName: MOBILE_DEVICE_DESCRIPTOR,
-      fallback: {
-        viewport: MOBILE_VIEWPORT,
-        screen: MOBILE_SCREEN,
-        isMobile: true,
-        hasTouch: true,
-        deviceScaleFactor: MOBILE_DEVICE_SCALE_FACTOR,
-        userAgent: DEFAULT_MOBILE_USER_AGENT,
-      },
+      descriptorName: config.MOBILE_DEVICE_DESCRIPTOR,
+      fallback: DeviceContextFactory.withScreen(
+        {
+          viewport: config.MOBILE_VIEWPORT,
+          isMobile: true,
+          hasTouch: true,
+          deviceScaleFactor: config.MOBILE_DEVICE_SCALE_FACTOR,
+          userAgent: config.DEFAULT_MOBILE_USER_AGENT,
+        },
+        config.MOBILE_SCREEN,
+      ),
       overrides: {
-        locale: MOBILE_LOCALE,
-        timezoneId: MOBILE_TIMEZONE_ID,
-        colorScheme: MOBILE_COLOR_SCHEME,
+        locale: config.MOBILE_LOCALE,
+        timezoneId: config.MOBILE_TIMEZONE_ID,
+        colorScheme: config.MOBILE_COLOR_SCHEME,
       },
     })
   }
@@ -84,19 +67,21 @@ export class DeviceContextFactory {
   buildTabletContextOptions(): BrowserContextOptions {
     return this.buildDeviceProfile({
       type: "tablet",
-      descriptorName: TABLET_DEVICE_DESCRIPTOR,
-      fallback: {
-        viewport: TABLET_VIEWPORT,
-        screen: TABLET_SCREEN,
-        isMobile: true,
-        hasTouch: true,
-        deviceScaleFactor: TABLET_DEVICE_SCALE_FACTOR,
-        userAgent: DEFAULT_TABLET_USER_AGENT,
-      },
+      descriptorName: config.TABLET_DEVICE_DESCRIPTOR,
+      fallback: DeviceContextFactory.withScreen(
+        {
+          viewport: config.TABLET_VIEWPORT,
+          isMobile: true,
+          hasTouch: true,
+          deviceScaleFactor: config.TABLET_DEVICE_SCALE_FACTOR,
+          userAgent: config.DEFAULT_TABLET_USER_AGENT,
+        },
+        config.TABLET_SCREEN,
+      ),
       overrides: {
-        locale: TABLET_LOCALE,
-        timezoneId: TABLET_TIMEZONE_ID,
-        colorScheme: TABLET_COLOR_SCHEME,
+        locale: config.TABLET_LOCALE,
+        timezoneId: config.TABLET_TIMEZONE_ID,
+        colorScheme: config.TABLET_COLOR_SCHEME,
       },
     })
   }
@@ -126,7 +111,7 @@ export class DeviceContextFactory {
     type,
     fallback,
     overrides,
-  }: DeviceProfileInit): BrowserContextOptions {
+  }: DeviceProfileInit): ContextOptions {
     const descriptor = this.resolveDescriptor(descriptorName, type)
     const baseOptions = descriptor ? this.normalizeDescriptor(descriptor, fallback) : fallback
     return DeviceContextFactory.mergeOptions(baseOptions, overrides)
@@ -134,9 +119,10 @@ export class DeviceContextFactory {
 
   private normalizeDescriptor(
     descriptor: PlaywrightDeviceDescriptor,
-    fallback: BrowserContextOptions,
-  ): BrowserContextOptions {
-    const { defaultBrowserType: _defaultBrowserType, ...options } = descriptor
+    fallback: ContextOptions,
+  ): ContextOptions {
+    const typedDescriptor = descriptor as PlaywrightDeviceDescriptor & ContextOptions
+    const { defaultBrowserType: _defaultBrowserType, ...options } = typedDescriptor
 
     return {
       ...options,
@@ -150,9 +136,9 @@ export class DeviceContextFactory {
   }
 
   private static mergeOptions(
-    baseOptions: BrowserContextOptions,
-    overrides: BrowserContextOptions,
-  ): BrowserContextOptions {
+    baseOptions: ContextOptions,
+    overrides: ContextOptions,
+  ): ContextOptions {
     return {
       ...baseOptions,
       ...overrides,
@@ -189,6 +175,20 @@ export class DeviceContextFactory {
         `Tablet device descriptor "${descriptorName}" not found. Falling back to basic tablet emulation.`,
       )
       this.tabletWarningEmitted = true
+    }
+  }
+
+  private static withScreen(
+    options: BrowserContextOptions,
+    screen?: ContextOptions["screen"],
+  ): ContextOptions {
+    if (!screen) {
+      return options
+    }
+
+    return {
+      ...options,
+      screen,
     }
   }
 }

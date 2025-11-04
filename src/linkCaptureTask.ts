@@ -32,11 +32,13 @@ export class LinkCaptureTask {
         }
       }
 
-      this.logInfo(`Finished link capture in ${this.formatDuration(linkStart)}.`)
+      this.logInfo(
+        `Finished link capture for ${this.config.url} in ${this.formatDuration(linkStart)}.`,
+      )
       return CaptureOutcome.ok(this.config.url, this.config.linkDir)
     } catch (error) {
       this.logWarn(
-        `Capture failed after ${this.formatDuration(linkStart)}: ${
+        `Capture failed for ${this.config.url} after ${this.formatDuration(linkStart)}: ${
           error instanceof Error ? error.message : String(error)
         }.`,
       )

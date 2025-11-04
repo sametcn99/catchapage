@@ -1,21 +1,32 @@
 {
-  "name": "catchapage",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
-  "scripts": {
-    "start": "bun run index.ts",
-    "lint": "biome lint .",
-    "format": "biome format --write ."
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.3.3",
-    "@types/bun": "^1.3.1"
-  },
-  "peerDependencies": {
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "playwright": "^1.56.1"
-  }
+	"name": "catchapage",
+	"module": "index.ts",
+	"type": "module",
+	"private": true,
+	"license": "GPL-3.0-only",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/sametcn99/catchapage"
+	},
+	"author": {
+		"email": "sametcn99@gmail.com",
+		"name": "sametcn99",
+		"url": "https://sametcc.me"
+	},
+	"scripts": {
+		"start": "bun run index.ts",
+		"lint": "biome lint .",
+		"format": "biome format --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.3",
+		"@types/bun": "^1.3.1"
+	},
+	"peerDependencies": {
+		"typescript": "^5.9.3"
+	},
+	"dependencies": {
+		"playwright": "^1.56.1",
+		"zod": "^4.1.12"
+	}
 }
