@@ -40,18 +40,30 @@ export class PageCaptureRunner {
   ) {}
 
   async run(): Promise<CaptureOutcome[]> {
+    const runStart = Date.now()
+    console.log(
+      `Starting capture run for ${this.urls.length} URL(s). Output root: ${this.outputDir}.`,
+    )
     const runFolder = await this.prepareRunFolder()
+    console.log(`Launching Chromium browser...`)
+    const launchStart = Date.now()
     const browser = await chromium.launch(PageCaptureRunner.buildChromiumLaunchOptions())
+    console.log(`Chromium launched in ${this.formatDuration(launchStart)}.`)
     let results: CaptureOutcome[] = []
 
     try {
       const preparedTasks = await this.prepareLinkTasks(browser, runFolder)
+      console.log(`Prepared ${preparedTasks.length} link task(s).`)
       results = await this.execute(preparedTasks)
     } finally {
+      console.log("Closing Chromium browser...")
+      const closeStart = Date.now()
       await browser.close()
+      console.log(`Browser closed in ${this.formatDuration(closeStart)}.`)
     }
 
     this.report(results, runFolder)
+    console.log(`Capture run finished in ${this.formatDuration(runStart)}.`)
     return results
   }
 
@@ -64,6 +76,7 @@ export class PageCaptureRunner {
     const runFolder = joinPath(process.cwd(), this.outputDir, timestamp)
     await this.ensureDir(runFolder)
     this.notifyRunFolderObservers(runFolder)
+    console.log(`Run folder ready: ${runFolder}.`)
     return runFolder
   }
 
@@ -83,6 +96,11 @@ export class PageCaptureRunner {
         parallelVariants: PARALLEL_CAPTURE_ENABLED,
       })
       tasks.push({ url, linkDir, task })
+      console.log(
+        `Queued capture task ${index + 1}/${this.urls.length} for ${url}. Variants: ${
+          PARALLEL_CAPTURE_ENABLED ? "parallel" : "sequential"
+        }.`,
+      )
     }
 
     return tasks
@@ -123,6 +141,7 @@ export class PageCaptureRunner {
     const folderName = this.slugifyUrl(url, index)
     const linkDir = joinPath(runFolder, folderName)
     await this.ensureDir(linkDir)
+    console.log(`Ensured link folder ${linkDir} for ${url}.`)
     return linkDir
   }
 
@@ -216,5 +235,10 @@ export class PageCaptureRunner {
     for (const observer of this.runFolderObservers) {
       observer.onRunFolderReady(runFolder)
     }
+  }
+
+  private formatDuration(start: number): string {
+    const elapsed = Math.max(0, Date.now() - start)
+    return `${elapsed}ms`
   }
 }
