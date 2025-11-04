@@ -1,11 +1,11 @@
-import { mkdirSync, appendFileSync, existsSync } from "node:fs"
-import { join } from "node:path"
-import { inspect } from "node:util"
+import type { FileSink } from "bun"
 import type { RunFolderObserver } from "./pageCaptureRunner"
+import { joinPath } from "./joinPath"
 
 export class FileLogger {
   private static instance: FileLogger | null = null
   private logFilePath: string | null = null
+  private logSink: FileSink | null = null
   private readonly pendingLines: string[] = []
 
   private constructor() {}
@@ -19,7 +19,7 @@ export class FileLogger {
 
   record(level: "log" | "warn" | "error", args: unknown[]): void {
     const formattedLine = `[${this.formatTime(new Date())}] [${level.toUpperCase()}] ${this.stringifyArgs(args)}`
-    if (this.logFilePath === null) {
+    if (this.logSink === null) {
       this.pendingLines.push(formattedLine)
       return
     }
@@ -28,16 +28,15 @@ export class FileLogger {
       this.flushPending()
     }
 
-    appendFileSync(this.logFilePath, `${formattedLine}\n`, "utf8")
+    this.writeLine(formattedLine)
   }
 
   attachTo(runFolder: string): void {
-    if (!existsSync(runFolder)) {
-      mkdirSync(runFolder, { recursive: true })
-    }
-
     if (this.logFilePath === null) {
-      this.logFilePath = join(runFolder, this.createLogFileName())
+      this.logFilePath = joinPath(runFolder, this.createLogFileName())
+      const logFile = Bun.file(this.logFilePath)
+      this.logSink = logFile.writer()
+      this.logSink.start?.()
     }
 
     if (this.pendingLines.length > 0) {
@@ -46,13 +45,16 @@ export class FileLogger {
   }
 
   private flushPending(): void {
-    if (this.logFilePath === null || this.pendingLines.length === 0) {
+    if (this.logSink === null || this.pendingLines.length === 0) {
       return
     }
 
-    const batch = this.pendingLines.join("\n")
-    this.pendingLines.length = 0
-    appendFileSync(this.logFilePath, `${batch}\n`, "utf8")
+    const writer = this.logSink
+    const bufferedLines = this.pendingLines.splice(0)
+    for (const line of bufferedLines) {
+      writer.write(`${line}\n`)
+    }
+    this.safeFlush(writer.flush())
   }
 
   private createLogFileName(): string {
@@ -73,9 +75,23 @@ export class FileLogger {
         if (typeof arg === "string") {
           return arg
         }
-        return inspect(arg, { depth: null, colors: false })
+        return Bun.inspect(arg, { depth: Infinity, colors: false })
       })
       .join(" ")
+  }
+
+  private writeLine(line: string): void {
+    if (this.logSink === null) {
+      this.pendingLines.push(line)
+      return
+    }
+
+    this.logSink.write(`${line}\n`)
+    this.safeFlush(this.logSink.flush())
+  }
+
+  private safeFlush(result: number | Promise<number>): void {
+    void Promise.resolve(result).catch(() => {})
   }
 }
 
